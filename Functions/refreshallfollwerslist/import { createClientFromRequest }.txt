@@ -1,0 +1,81 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+
+    // Verify admin access
+    const user = await base44.auth.me();
+    if (!user || user.role !== 'admin') {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - Admin only' }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("🔄 Starting follower count refresh for all users...");
+
+    // Get all users
+    const allUsers = await base44.asServiceRole.entities.User.list();
+    console.log(`📊 Found ${allUsers.length} users to process`);
+
+    let updatedCount = 0;
+    let errorCount = 0;
+
+    // Process each user
+    for (const targetUser of allUsers) {
+      try {
+        // Count followers (people following this user)
+        const followers = await base44.asServiceRole.entities.Follow.filter({
+          following_id: targetUser.id
+        });
+
+        // Count following (people this user follows)
+        const following = await base44.asServiceRole.entities.Follow.filter({
+          follower_id: targetUser.id
+        });
+
+        const followerCount = followers.length;
+        const followingCount = following.length;
+
+        // Update user with correct counts
+        await base44.asServiceRole.entities.User.update(targetUser.id, {
+          follower_count: followerCount,
+          following_count: followingCount
+        });
+
+        updatedCount++;
+        
+        if (updatedCount % 10 === 0) {
+          console.log(`✅ Processed ${updatedCount}/${allUsers.length} users...`);
+        }
+      } catch (error) {
+        console.error(`❌ Error updating user ${targetUser.id}:`, error);
+        errorCount++;
+      }
+    }
+
+    console.log(`✅ Follower count refresh complete!`);
+    console.log(`📊 Updated: ${updatedCount} users`);
+    console.log(`❌ Errors: ${errorCount} users`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Follower counts refreshed successfully',
+        stats: {
+          total_users: allUsers.length,
+          updated: updatedCount,
+          errors: errorCount
+        }
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (err) {
+    console.error("❌ Error refreshing follower counts:", err);
+    return new Response(
+      JSON.stringify({ error: err.message || "Server error" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
+});

@@ -1,0 +1,55 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    
+    // Verify user is authenticated
+    const user = await base44.auth.me();
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { userId, followerId, followerName, action } = await req.json();
+
+    if (!userId || !followerId || !action) {
+      return Response.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
+
+    console.log(`${action === 'follow' ? '➕' : '➖'} Updating follow counts for ${userId}`);
+
+    // Get current user data
+    const users = await base44.asServiceRole.entities.User.filter({ id: userId });
+    const targetUser = users[0];
+
+    const followers = await base44.asServiceRole.entities.User.filter({ id: followerId });
+    const follower = followers[0];
+
+    if (!targetUser || !follower) {
+      return Response.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    if (action === 'follow') {
+      // Increment follower count for target user
+      await base44.asServiceRole.entities.User.update(userId, {
+        follower_count: (targetUser.follower_count || 0) + 1
+      });
+
+      // Increment following count for follower
+      await base44.asServiceRole.entities.User.update(followerId, {
+        following_count: (follower.following_count || 0) + 1
+      });
+
+      // Send notification
+      await base44.asServiceRole.entities.Notification.create({
+        user_id: userId,
+        type: "new_follower",
+        title: "🎉 New Follower!",
+        message: `${followerName} started following you`,
+        icon: "👤",
+        link_url: `/#/Profile?userId=${followerId}`,
+        related_user_id: followerId,
+        related_user_name: followerName
+      });
+    } else if (action === 'unfollow') {
+   

@@ -1,0 +1,23 @@
+import { createClient } from '@supabase/supabase-js';
+
+// --- Your Supabase credentials ---
+const supabaseUrl = 'https://piyzvrgtspdxhtxcbiwi.supabase.co'; // 
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ'; // 
+
+// --- Create Supabase client ---
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+async function testConnection() {
+  try {
+    const { data, error } = await supabase.from('your_table_name').select('*').limit(1);
+
+    if (error) throw error;
+
+    console.log('✅ Connection successful!');
+    console.log('Sample data:', data);
+  } catch (err) {
+    console.error('❌ Supabase connection failed:', err.message);
+  }
+}
+
+testConnection();

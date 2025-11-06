@@ -1,0 +1,76 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+
+    const liveStreams = await base44.asServiceRole.entities.Stream.filter({ status: 'live' });
+
+    console.log(`📊 Tracking ${liveStreams.length} live streams...`);
+
+    for (const stream of liveStreams) {
+      try {
+        const startTime = new Date(stream.created_date);
+        const now = new Date();
+        const durationHours = (now - startTime) / (1000 * 60 * 60);
+
+        const streamers = await base44.asServiceRole.entities.User.filter({ id: stream.streamer_id });
+        if (streamers.length === 0) continue;
+
+        const streamer = streamers[0];
+        const currentHours = streamer.total_streaming_hours || 0;
+        const hoursSinceLastPayout = streamer.hours_since_last_payout || 0;
+
+        const lastHeartbeat = stream.last_heartbeat ? new Date(stream.last_heartbeat) : startTime;
+        const hoursSinceLastCheck = (now - lastHeartbeat) / (1000 * 60 * 60);
+
+        if (hoursSinceLastCheck > 0) {
+          const newTotalHours = currentHours + hoursSinceLastCheck;
+          const newHoursSincePayout = hoursSinceLastPayout + hoursSinceLastCheck;
+          
+          // Check for level upgrade every 72 hours
+          const currentLevel = streamer.level || 1;
+          const hoursToNextLevel = 72 - (newTotalHours % 72);
+          const levelsToAdd = Math.floor(newTotalHours / 72) - Math.floor(currentHours / 72);
+          
+          const updates = {
+            total_streaming_hours: newTotalHours,
+            hours_since_last_payout: newHoursSincePayout
+          };
+
+          if (levelsToAdd > 0 && currentLevel < 100) {
+            updates.level = Math.min(100, currentLevel + levelsToAdd);
+            
+            // Send level up notification
+            await base44.asServiceRole.entities.Notification.create({
+              user_id: stream.streamer_id,
+              type: "level_up",
+              title: "🎉 Level Up!",
+              message: `You've reached level ${updates.level}! You've streamed ${newTotalHours.toFixed(1)} hours total.`,
+              icon: "🏆",
+              link_url: "/#/Profile"
+            });
+          }
+
+          await base44.asServiceRole.entities.User.update(stream.streamer_id, updates);
+
+          console.log(`✅ ${streamer.username || streamer.full_name}: +${hoursSinceLastCheck.toFixed(2)}h (Total: ${newTotalHours.toFixed(2)}h, Since Payout: ${newHoursSincePayout.toFixed(2)}h)`);
+        }
+
+      } catch (error) {
+        console.error(`❌ Error tracking stream ${stream.id}:`, error);
+      }
+    }
+
+    return Response.json({
+      success: true,
+      message: `Processed ${liveStreams.length} live streams`
+    });
+
+  } catch (error) {
+    console.error('❌ Error tracking streaming hours:', error);
+    return Response.json({
+      error: error.message
+    }, { status: 500 });
+  }
+});

@@ -1,0 +1,76 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    
+    // Get user's IP from request headers
+    const ip = req.headers.get('x-forwarded-for') || 
+                req.headers.get('x-real-ip') || 
+                'unknown';
+
+    const user = await base44.auth.me();
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    console.log(`🔍 Checking IP: ${ip} for user: ${user.username || user.full_name}`);
+
+    // Basic VPN/Proxy detection indicators
+    const vpnIndicators = {
+      isVPN: false,
+      isProxy: false,
+      isTor: false,
+      isDataCenter: false,
+      riskScore: 0,
+      details: []
+    };
+
+    // Check common VPN/proxy headers
+    const suspiciousHeaders = [
+      'x-forwarded-for',
+      'x-real-ip',
+      'via',
+      'x-proxy-id',
+      'x-forwarded-host'
+    ];
+
+    let headerCount = 0;
+    for (const header of suspiciousHeaders) {
+      if (req.headers.get(header)) {
+        headerCount++;
+      }
+    }
+
+    if (headerCount >= 3) {
+      vpnIndicators.isProxy = true;
+      vpnIndicators.riskScore += 30;
+      vpnIndicators.details.push('Multiple proxy headers detected');
+    }
+
+    // Check if IP is from a known datacenter range (simplified)
+    const datacenterRanges = [
+      /^185\./,  // Common VPN range
+      /^104\./,  // Cloudflare/datacenters
+      /^192\.168\./, // Local network (suspicious if external)
+      /^10\./,   // Local network
+      /^172\.16\./, // Local network
+    ];
+
+    for (const range of datacenterRanges) {
+      if (range.test(ip)) {
+        vpnIndicators.isDataCenter = true;
+        vpnIndicators.riskScore += 30;
+        vpnIndicators.details.push('IP from datacenter range');
+        break;
+      }
+    }
+
+    // Store IP address (only visible to admin)
+    await base44.auth.updateMe({
+      ip_address: ip
+    });
+
+    // If high risk (50+), BAN THE USER
+    if (vpnIndicators.riskScore >= 50) {
+   

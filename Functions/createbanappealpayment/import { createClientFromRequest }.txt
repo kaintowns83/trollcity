@@ -1,0 +1,76 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { Client, Environment } from 'npm:square@35.0.0';
+
+Deno.serve(async (req) => {
+  try {
+    console.log('🟦 [Ban Appeal] Request received');
+    
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    
+    if (!user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!user.is_banned) {
+      return Response.json({ error: "User is not banned" }, { status: 400 });
+    }
+
+    console.log('🟦 [Ban Appeal] Processing for user:', user.email);
+
+    const SQUARE_ACCESS_TOKEN = Deno.env.get("SQUARE_ACCESS_TOKEN");
+    const SQUARE_LOCATION_ID = Deno.env.get("SQUARE_LOCATION_ID");
+
+    if (!SQUARE_ACCESS_TOKEN || !SQUARE_LOCATION_ID) {
+      return Response.json({ 
+        error: "Payment system not configured"
+      }, { status: 500 });
+    }
+
+    const client = new Client({
+      accessToken: SQUARE_ACCESS_TOKEN,
+      environment: Environment.Production,
+    });
+
+    const { checkoutApi } = client;
+    const idempotencyKey = crypto.randomUUID();
+    
+    // $25 = 2500 cents
+    const amountInCents = 2500;
+    
+    const checkoutRequest = {
+      idempotencyKey,
+      order: {
+        locationId: SQUARE_LOCATION_ID,
+        lineItems: [
+          {
+            name: "Ban Appeal Fee - Account Reinstatement",
+            quantity: "1",
+            basePriceMoney: {
+              amount: BigInt(amountInCents),
+              currency: "USD"
+            }
+          }
+        ]
+      },
+      checkoutOptions: {
+        redirectUrl: `https://livetrollz.base44.app/#/BanAppealReturn?userId=${user.id}`,
+        allowTipping: false,
+        acceptedPaymentMethods: {
+          applePay: true,
+          googlePay: true,
+          cashAppPay: true,
+        }
+      },
+      prePopulatedData: {
+        buyerEmail: user.email,
+      }
+    };
+
+    console.log('🟦 [Ban Appeal] Creating payment link...');
+
+    const response = await checkoutApi.createPaymentLink(checkoutRequest);
+
+    if (!response.result || !response.result.paymentLink) {
+      return Response.json({ 
+   

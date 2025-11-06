@@ -1,0 +1,44 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    
+    const user = await base44.auth.me();
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { streamId } = await req.json();
+
+    if (!streamId) {
+      return Response.json({ error: 'Stream ID required' }, { status: 400 });
+    }
+
+    console.log('📡 Getting WebRTC answers for stream:', streamId);
+
+    // Get all participants with answers
+    const participants = await base44.entities.StreamParticipant.filter({
+      stream_id: streamId,
+      status: 'active'
+    });
+
+    const answers = participants
+      .filter(p => p.webrtc_answer && p.user_id !== user.id)
+      .map(p => ({
+        userId: p.user_id,
+        answer: p.webrtc_answer
+      }));
+
+    return Response.json({
+      success: true,
+      answers
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting WebRTC answers:', error);
+    return Response.json({
+      error: error.message
+    }, { status: 500 });
+  }
+});

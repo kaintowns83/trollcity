@@ -1,0 +1,76 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    
+    // This should be run monthly (via cron job)
+    console.log('💰 [Troll Officer Payments] Starting monthly distribution...');
+
+    // Get all troll officers
+    const trollOfficers = await base44.asServiceRole.entities.User.filter({ 
+      is_troll_officer: true 
+    });
+
+    console.log(`📊 Found ${trollOfficers.length} Troll Officers`);
+
+    if (trollOfficers.length === 0) {
+      return Response.json({
+        success: true,
+        message: 'No troll officers to pay',
+        paid: 0
+      });
+    }
+
+    // Calculate total platform revenue for the month
+    // This is a simplified calculation - you can make it more sophisticated
+    const lastMonth = new Date();
+    lastMonth.setMonth(lastMonth.getMonth() - 1);
+    
+    const monthlyRevenue = await base44.asServiceRole.entities.PlatformRevenue.filter({
+      status: "completed"
+    });
+
+    // Sum up revenue from last month
+    const totalRevenue = monthlyRevenue
+      .filter(r => new Date(r.created_date) >= lastMonth)
+      .reduce((sum, r) => sum + (r.amount_usd || 0), 0);
+
+    console.log(`💵 Total platform revenue for month: $${totalRevenue.toFixed(2)}`);
+
+    // Calculate 2% share
+    const officerShare = totalRevenue * 0.02;
+    
+    // Divide equally among all officers
+    const coinsPerOfficer = Math.floor((officerShare * 160) / trollOfficers.length); // $1 = 160 coins
+
+    console.log(`💎 Each officer gets: ${coinsPerOfficer} coins`);
+
+    let paymentsMade = 0;
+
+    // Distribute to each officer
+    for (const officer of trollOfficers) {
+      try {
+        await base44.asServiceRole.entities.User.update(officer.id, {
+          coins: (officer.coins || 0) + coinsPerOfficer,
+          purchased_coins: (officer.purchased_coins || 0) + coinsPerOfficer // These are paid coins, not free
+        });
+
+        // Create transaction record
+        await base44.asServiceRole.entities.Transaction.create({
+          user_id: officer.id,
+          user_name: officer.full_name,
+          transaction_type: "coin_purchase",
+          amount_coins: coinsPerOfficer,
+          direction: "incoming",
+          payment_method: "troll_officer_revenue",
+          description: `Monthly Troll Officer Revenue Share (2% of $${totalRevenue.toFixed(2)})`,
+          status: "completed"
+        });
+
+        // Send notification
+        await base44.asServiceRole.entities.Notification.create({
+          user_id: officer.id,
+          type: "achievement",
+          title: "💰 Monthly Revenue Share",
+   

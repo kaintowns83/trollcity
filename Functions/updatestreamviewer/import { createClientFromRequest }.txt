@@ -1,0 +1,75 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    
+    console.log('👁️ [Viewer Count] Updating all stream viewer counts...');
+
+    // Get all live streams
+    const liveStreams = await base44.asServiceRole.entities.Stream.filter({ 
+      status: 'live' 
+    });
+
+    console.log(`📊 Found ${liveStreams.length} live streams`);
+
+    let updatedCount = 0;
+    const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+
+    // For each live stream, count active participants
+    for (const stream of liveStreams) {
+      try {
+        // Get all active participants with recent heartbeat (last 30 seconds)
+        const activeParticipants = await base44.asServiceRole.entities.StreamParticipant.filter({
+          stream_id: stream.id,
+          status: "active"
+        });
+
+        // Filter to only those with recent heartbeat
+        const recentParticipants = activeParticipants.filter(p => 
+          p.last_heartbeat && p.last_heartbeat >= thirtySecondsAgo
+        );
+
+        const actualViewerCount = recentParticipants.length;
+
+        // Update stream viewer count only if it changed
+        if (stream.viewer_count !== actualViewerCount) {
+          await base44.asServiceRole.entities.Stream.update(stream.id, {
+            viewer_count: actualViewerCount
+          });
+
+          console.log(`✅ Updated stream "${stream.title}": ${actualViewerCount} viewers`);
+          updatedCount++;
+        }
+
+        // Clean up stale participants (no heartbeat in 30+ seconds)
+        const staleParticipants = activeParticipants.filter(p => 
+          !p.last_heartbeat || p.last_heartbeat < thirtySecondsAgo
+        );
+
+        for (const staleP of staleParticipants) {
+          await base44.asServiceRole.entities.StreamParticipant.update(staleP.id, {
+            status: "removed"
+          });
+          console.log(`🧹 Cleaned up stale participant: ${staleP.username}`);
+        }
+
+      } catch (error) {
+        console.error(`❌ Failed to update stream ${stream.id}:`, error);
+      }
+    }
+
+    return Response.json({
+      success: true,
+      message: `Updated ${updatedCount} streams`,
+      totalStreams: liveStreams.length,
+      updatedCount: updatedCount
+    });
+
+  } catch (error) {
+    console.error('❌ Viewer count update error:', error);
+    return Response.json({
+      error: error.message
+    }, { status: 500 });
+  }
+});

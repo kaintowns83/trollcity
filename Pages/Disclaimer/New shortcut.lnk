@@ -1,0 +1,106 @@
+import React from "react";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, Shield, Info } from "lucide-react";
+
+export default function DisclaimerPage() {
+  return (
+    <div className="min-h-screen bg-[#0a0a0f] p-6 md:p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-10">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <AlertTriangle className="w-12 h-12 text-orange-400" />
+            <h1 className="text-4xl md:text-5xl font-bold text-white">Disclaimer</h1>
+          </div>
+          <p className="text-gray-400 text-lg">TrollCity Live Streaming Platform</p>
+        </div>
+
+        {/* Main Disclaimer Card */}
+        <Card className="bg-gradient-to-r from-orange-500/20 to-red-500/20 border-orange-500 p-8 mb-6">
+          <div className="flex items-start gap-4">
+            <Info className="w-8 h-8 text-orange-400 flex-shrink-0 mt-1" />
+            <div className="text-gray-200 space-y-4">
+              <h2 className="text-2xl font-bold text-white mb-4">Important Notice</h2>
+              
+              <p className="leading-relaxed">
+                This application was independently developed by <strong className="text-white">Troll City</strong> and is <strong className="text-orange-300">not affiliated with, endorsed by, or connected to</strong> LiveMe, its parent company, or any of its affiliates.
+              </p>
+
+              <p className="leading-relaxed">
+                All trademarks, service marks, and trade names referenced in this app are the property of their respective owners.
+              </p>
+
+              <p className="leading-relaxed">
+                The concepts, features, and designs within this application were created solely by <strong className="text-white">Troll City</strong> and do not derive from or utilize any proprietary information belonging to LiveMe or any third party.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Additional Information */}
+        <Card className="bg-[#1a1a24] border-[#2a2a3a] p-8 mb-6">
+          <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+            <Shield className="w-6 h-6 text-cyan-400" />
+            Independent Platform
+          </h2>
+          <div className="text-gray-300 space-y-4">
+            <p>
+              TrollCity is an independent live streaming platform built from the ground up with unique features and functionality designed specifically for our community.
+            </p>
+            
+            <div className="bg-[#0a0a0f] rounded-lg p-4 space-y-3">
+              <h3 className="text-white font-semibold mb-2">What Makes TrollCity Unique:</h3>
+              <ul className="list-disc list-inside space-y-2 text-gray-300">
+                <li>Custom-built streaming infrastructure using Amazon IVS</li>
+                <li>Proprietary coin system and payout tiers</li>
+                <li>Original moderation and community features</li>
+                <li>Unique entrance effects and gamification</li>
+                <li>Independent monetization system</li>
+                <li>Custom-designed user interface and experience</li>
+              </ul>
+            </div>
+
+            <p className="text-sm text-gray-400 mt-4">
+              Any similarities to other platforms are coincidental and do not indicate any business relationship, partnership, or endorsement.
+            </p>
+          </div>
+        </Card>
+
+        {/* Legal Notice */}
+        <Card className="bg-[#1a1a24] border-[#2a2a3a] p-8 mb-8">
+          <h2 className="text-2xl font-bold text-white mb-4">Intellectual Property</h2>
+          <div className="text-gray-300 space-y-4">
+            <p>
+              All content, features, and functionality on TrollCity, including but not limited to:
+            </p>
+            
+            <ul className="list-disc list-inside space-y-2 ml-4">
+              <li>Design, layout, and user interface</li>
+              <li>Graphics, logos, and branding</li>
+              <li>Software code and architecture</li>
+              <li>Features and functionality</li>
+              <li>Documentation and content</li>
+            </ul>
+
+            <p>
+              ...are the exclusive property of Troll City and are protected by international copyright, trademark, and other intellectual property laws.
+            </p>
+
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mt-6">
+              <p className="text-blue-300 text-sm">
+                ℹ️ If you have any questions about this disclaimer or our platform's independence, please contact us at legal@trollcity.app
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Footer */}
+        <div className="text-center text-gray-500 text-sm py-6 border-t border-[#2a2a3a]">
+          <p>© {new Date().getFullYear()} TrollCity. All Rights Reserved.</p>
+          <p className="mt-2">This is an independent platform with no affiliation to any third-party services.</p>
+        </div>
+      </div>
+    </div>
+  );
+}

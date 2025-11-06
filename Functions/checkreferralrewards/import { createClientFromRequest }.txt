@@ -1,0 +1,61 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    
+    // This function should be called periodically or triggered when users level up
+    // For now, we'll check all pending referrals
+    
+    const pendingReferrals = await base44.asServiceRole.entities.Referral.filter({
+      status: "pending",
+      reward_given: false
+    });
+
+    console.log(`📊 Checking ${pendingReferrals.length} pending referrals...`);
+
+    let rewardsGiven = 0;
+
+    for (const referral of pendingReferrals) {
+      // Get the referred user's current level
+      const referredUsers = await base44.asServiceRole.entities.User.filter({
+        id: referral.referred_id
+      });
+
+      if (referredUsers.length === 0) continue;
+
+      const referredUser = referredUsers[0];
+      const currentLevel = referredUser.level || 1;
+
+      // Update the referral with current level
+      await base44.asServiceRole.entities.Referral.update(referral.id, {
+        referred_user_level: currentLevel
+      });
+
+      // Check if they reached level 10
+      if (currentLevel >= 10 && !referral.reward_given) {
+        console.log(`🎉 Referral completed! ${referral.referred_username} reached level ${currentLevel}`);
+
+        // Give 2000 purchased coins to the referrer
+        const referrers = await base44.asServiceRole.entities.User.filter({
+          id: referral.referrer_id
+        });
+
+        if (referrers.length > 0) {
+          const referrer = referrers[0];
+          
+          await base44.asServiceRole.entities.User.update(referral.referrer_id, {
+            coins: (referrer.coins || 0) + 2000,
+            purchased_coins: (referrer.purchased_coins || 0) + 2000,
+            total_referrals: (referrer.total_referrals || 0) + 1,
+            referral_coins_earned: (referrer.referral_coins_earned || 0) + 2000
+          });
+
+          // Send notification to referrer
+          await base44.asServiceRole.entities.Notification.create({
+            user_id: referral.referrer_id,
+            type: "achievement",
+            title: "Referral Reward Earned!",
+            message: `${referral.referred_username} reached Level 10! You've earned 2,000 Troll Coins.`,
+            icon: "🎉",
+   

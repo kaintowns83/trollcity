@@ -1,0 +1,330 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AlertTriangle, Trash2, Shield, XCircle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+export default function DeleteAccountPage() {
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [understoodWarnings, setUnderstoodWarnings] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("No user found");
+      
+      setIsDeleting(true);
+
+      // Delete all user's streams
+      const streams = await base44.entities.Stream.filter({ streamer_id: user.id });
+      for (const stream of streams) {
+        await base44.entities.Stream.delete(stream.id);
+      }
+
+      // Delete all user's chat messages
+      const messages = await base44.entities.ChatMessage.filter({ user_id: user.id });
+      for (const message of messages) {
+        await base44.entities.ChatMessage.delete(message.id);
+      }
+
+      // Delete all follows (both following and followers)
+      const following = await base44.entities.Follow.filter({ follower_id: user.id });
+      for (const follow of following) {
+        await base44.entities.Follow.delete(follow.id);
+      }
+      
+      const followers = await base44.entities.Follow.filter({ following_id: user.id });
+      for (const follower of followers) {
+        await base44.entities.Follow.delete(follower.id);
+      }
+
+      // Delete all gifts sent
+      const gifts = await base44.entities.StreamGift.filter({ sender_id: user.id });
+      for (const gift of gifts) {
+        await base44.entities.StreamGift.delete(gift.id);
+      }
+
+      // Delete all payouts
+      const payouts = await base44.entities.Payout.filter({ user_id: user.id });
+      for (const payout of payouts) {
+        await base44.entities.Payout.delete(payout.id);
+      }
+
+      // Delete all subscriptions
+      const subscriptions = await base44.entities.UserSubscription.filter({ subscriber_id: user.id });
+      for (const subscription of subscriptions) {
+        await base44.entities.UserSubscription.delete(subscription.id);
+      }
+
+      // Delete subscription tiers created by user
+      const tiers = await base44.entities.SubscriptionTier.filter({ streamer_id: user.id });
+      for (const tier of tiers) {
+        await base44.entities.SubscriptionTier.delete(tier.id);
+      }
+
+      // Delete tips sent and received
+      const tipsSent = await base44.entities.Tip.filter({ tipper_id: user.id });
+      for (const tip of tipsSent) {
+        await base44.entities.Tip.delete(tip.id);
+      }
+      
+      const tipsReceived = await base44.entities.Tip.filter({ streamer_id: user.id });
+      for (const tip of tipsReceived) {
+        await base44.entities.Tip.delete(tip.id);
+      }
+
+      // Delete transactions
+      const transactions = await base44.entities.Transaction.filter({ user_id: user.id });
+      for (const transaction of transactions) {
+        await base44.entities.Transaction.delete(transaction.id);
+      }
+
+      // Delete daily rewards
+      const rewards = await base44.entities.DailyReward.filter({ user_id: user.id });
+      for (const reward of rewards) {
+        await base44.entities.DailyReward.delete(reward.id);
+      }
+
+      // Delete achievements
+      const achievements = await base44.entities.UserAchievement.filter({ user_id: user.id });
+      for (const achievement of achievements) {
+        await base44.entities.UserAchievement.delete(achievement.id);
+      }
+
+      // Delete entrance effects owned
+      const effects = await base44.entities.UserEntranceEffect.filter({ user_id: user.id });
+      for (const effect of effects) {
+        await base44.entities.UserEntranceEffect.delete(effect.id);
+      }
+
+      // Delete stream participants
+      const participants = await base44.entities.StreamParticipant.filter({ user_id: user.id });
+      for (const participant of participants) {
+        await base44.entities.StreamParticipant.delete(participant.id);
+      }
+
+      // Delete coin requests
+      const coinRequests = await base44.entities.CoinRequest.filter({ user_id: user.id });
+      for (const request of coinRequests) {
+        await base44.entities.CoinRequest.delete(request.id);
+      }
+
+      // Delete chat bans
+      const chatBans = await base44.entities.ChatBan.filter({ user_id: user.id });
+      for (const ban of chatBans) {
+        await base44.entities.ChatBan.delete(ban.id);
+      }
+
+      // Delete broadcaster application
+      const applications = await base44.entities.BroadcasterApplication.filter({ user_id: user.id });
+      for (const app of applications) {
+        await base44.entities.BroadcasterApplication.delete(app.id);
+      }
+
+      // Delete scheduled streams
+      const scheduledStreams = await base44.entities.ScheduledStream.filter({ streamer_id: user.id });
+      for (const stream of scheduledStreams) {
+        await base44.entities.ScheduledStream.delete(stream.id);
+      }
+
+      // Delete notifications
+      const notifications = await base44.entities.Notification.filter({ user_id: user.id });
+      for (const notification of notifications) {
+        await base44.entities.Notification.delete(notification.id);
+      }
+
+      // Delete leaderboard entries
+      const leaderboardEntries = await base44.entities.StreamerLeaderboard.filter({ gifter_id: user.id });
+      for (const entry of leaderboardEntries) {
+        await base44.entities.StreamerLeaderboard.delete(entry.id);
+      }
+      
+      const leaderboardStreamer = await base44.entities.StreamerLeaderboard.filter({ streamer_id: user.id });
+      for (const entry of leaderboardStreamer) {
+        await base44.entities.StreamerLeaderboard.delete(entry.id);
+      }
+
+      // Finally, delete the user account
+      await base44.entities.User.delete(user.id);
+
+      // Logout and redirect
+      toast.success("Account deleted successfully. Goodbye! 👋");
+      
+      // Wait a moment for toast to show
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Logout
+      base44.auth.logout("/");
+    },
+    onError: (error) => {
+      setIsDeleting(false);
+      toast.error("Failed to delete account: " + error.message);
+    }
+  });
+
+  const handleDeleteAccount = () => {
+    if (confirmText !== "DELETE") {
+      toast.error('Please type "DELETE" to confirm');
+      return;
+    }
+
+    if (!understoodWarnings) {
+      toast.error("Please confirm you understand the warnings");
+      return;
+    }
+
+    deleteAccountMutation.mutate();
+  };
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0f] p-6 md:p-8">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Trash2 className="w-12 h-12 text-red-400" />
+            <h1 className="text-4xl font-bold text-white">Delete Account</h1>
+          </div>
+          <p className="text-gray-400 text-lg">Permanently delete your TrollCity account</p>
+        </div>
+
+        {/* Warning Banner */}
+        <Card className="bg-gradient-to-r from-red-500/20 to-orange-500/20 border-red-500 p-6 mb-8">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1 animate-pulse" />
+            <div>
+              <h2 className="text-xl font-bold text-white mb-2">⚠️ Warning: This Action is Permanent!</h2>
+              <p className="text-red-300 mb-3">
+                Once you delete your account, there is <strong>NO GOING BACK</strong>. All your data will be permanently deleted immediately.
+              </p>
+              <p className="text-gray-300 text-sm">
+                This action will happen instantly and cannot be undone. Please make sure you want to proceed.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Account Info */}
+        <Card className="bg-[#1a1a24] border-[#2a2a3a] p-6 mb-8">
+          <h3 className="text-lg font-bold text-white mb-4">Account to be deleted:</h3>
+          <div className="flex items-center gap-4">
+            {user.avatar ? (
+              <img 
+                src={user.avatar} 
+                alt={user.full_name}
+                className="w-16 h-16 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                <span className="text-white font-bold text-2xl">
+                  {user.full_name[0]?.toUpperCase()}
+                </span>
+              </div>
+            )}
+            <div>
+              <p className="text-white font-bold text-lg">
+                {user.username ? `@${user.username}` : user.full_name}
+              </p>
+              <p className="text-gray-400">{user.email}</p>
+              <p className="text-gray-500 text-sm">Level {user.level || 1} • {user.coins || 0} coins</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* What Will Be Deleted */}
+        <Card className="bg-[#1a1a24] border-[#2a2a3a] p-6 mb-8">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <XCircle className="w-5 h-5 text-red-400" />
+            What will be permanently deleted:
+          </h3>
+          <div className="space-y-3 text-gray-300">
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Your Profile:</strong> Username, bio, avatar, and all personal information
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">All Streams:</strong> Past broadcasts, stream history, and analytics
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Chat Messages:</strong> All messages you've sent across all streams
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Social Connections:</strong> Followers, following, and friend lists
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Virtual Currency:</strong> All coins (purchased and earned) - NO REFUNDS
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Gifts & Transactions:</strong> Gift history, tips sent/received, purchases
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Subscriptions:</strong> Active subscriptions and subscription tiers you created
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Earnings & Payouts:</strong> Payout history and pending requests
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Achievements & Rewards:</strong> Unlocked achievements, daily rewards, level progress
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 mt-1">•</span>
+              <div>
+                <strong className="text-white">Broadcaster Status:</strong> Verified status and ID documents
+              </div>
+            </div>
+          </div>
+        </Card>
+
+ 

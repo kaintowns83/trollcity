@@ -1,0 +1,61 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { Client, Environment } from 'npm:square@35.0.0';
+
+Deno.serve(async (req) => {
+  try {
+    console.log('🟦 [Square Function] Request received');
+    
+    // Initialize Base44 client
+    const base44 = createClientFromRequest(req);
+
+    // Verify user authentication
+    const user = await base44.auth.me();
+    console.log('🟦 [Square Function] User:', user?.email);
+    
+    if (!user) {
+      console.error('❌ No user authenticated');
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Parse incoming data
+    const body = await req.json();
+    console.log('🟦 [Square Function] Request body:', body);
+    
+    const { amount, coinAmount } = body;
+    
+    if (!amount || amount < 1) {
+      console.error('❌ Invalid amount:', amount);
+      return Response.json({ error: "Invalid amount" }, { status: 400 });
+    }
+
+    console.log('🟦 Amount:', amount, 'Coins:', coinAmount);
+
+    // Get Square credentials
+    const SQUARE_ACCESS_TOKEN = Deno.env.get("SQUARE_ACCESS_TOKEN");
+    const SQUARE_LOCATION_ID = Deno.env.get("SQUARE_LOCATION_ID");
+
+    console.log('🟦 Square Access Token exists:', !!SQUARE_ACCESS_TOKEN);
+    console.log('🟦 Square Access Token length:', SQUARE_ACCESS_TOKEN?.length);
+    console.log('🟦 Square Location ID:', SQUARE_LOCATION_ID);
+
+    if (!SQUARE_ACCESS_TOKEN || !SQUARE_LOCATION_ID) {
+      console.error('❌ Missing Square credentials');
+      return Response.json({ 
+        error: "Square credentials not configured. Please set SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID in environment variables.",
+        details: {
+          hasAccessToken: !!SQUARE_ACCESS_TOKEN,
+          hasLocationId: !!SQUARE_LOCATION_ID
+        }
+      }, { status: 500 });
+    }
+
+    // Initialize Square client
+    console.log('🟦 Initializing Square client...');
+    const client = new Client({
+      accessToken: SQUARE_ACCESS_TOKEN,
+      environment: Environment.Production,
+    });
+
+    const { checkoutApi } = client;
+
+   

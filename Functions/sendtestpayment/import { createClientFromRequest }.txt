@@ -1,0 +1,75 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+
+    // Verify admin
+    const user = await base44.auth.me();
+    if (!user || user.role !== 'admin') {
+      return Response.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
+    }
+
+    const { userId } = await req.json();
+
+    if (!userId) {
+      return Response.json({ error: 'User ID required' }, { status: 400 });
+    }
+
+    // Get user
+    const users = await base44.asServiceRole.entities.User.filter({ id: userId });
+    const targetUser = users[0];
+
+    if (!targetUser) {
+      return Response.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    if (!targetUser.payment_method) {
+      return Response.json({ error: 'User has no payment method set' }, { status: 400 });
+    }
+
+    console.log(`💳 Sending $0.00 test payment to ${targetUser.email} via ${targetUser.payment_method}`);
+
+    // Create or update payment verification
+    const existingVerifications = await base44.asServiceRole.entities.PaymentVerification.filter({
+      user_id: userId
+    });
+
+    if (existingVerifications.length > 0) {
+      await base44.asServiceRole.entities.PaymentVerification.update(existingVerifications[0].id, {
+        test_payment_sent: true,
+        test_payment_date: new Date().toISOString(),
+        payment_method: targetUser.payment_method,
+        payment_details: targetUser.payment_email || targetUser.payment_username || "Bank Transfer"
+      });
+    } else {
+      await base44.asServiceRole.entities.PaymentVerification.create({
+        user_id: userId,
+        user_name: targetUser.full_name,
+        user_email: targetUser.email,
+        payment_method: targetUser.payment_method,
+        payment_details: targetUser.payment_email || targetUser.payment_username || "Bank Transfer",
+        test_payment_sent: true,
+        test_payment_date: new Date().toISOString(),
+        verified_by_user: false,
+        verification_required: true,
+        notes: `Test payment sent by ${user.full_name}`
+      });
+    }
+
+    // Send notification
+    await base44.asServiceRole.entities.Notification.create({
+      user_id: userId,
+      type: "achievement",
+      title: "💳 Test Payment Sent",
+      message: `We've sent a $0.00 test payment to your ${targetUser.payment_method} account. Please verify you received it in your Profile → Payment tab.`,
+      icon: "✅",
+      link_url: "/#/Profile?tab=payment"
+    });
+
+    // NOTE: In production, you'd integrate with actual payment APIs here:
+    // - PayPal: Use PayPal Payouts API with $0.00 amount
+    // - CashApp/Venmo: Use their APIs
+    // - Bank Transfer: Use ACH verification with micro-deposits
+
+   

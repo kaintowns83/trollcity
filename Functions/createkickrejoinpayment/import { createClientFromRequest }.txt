@@ -1,0 +1,91 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { Client, Environment } from 'npm:square@35.0.0';
+
+Deno.serve(async (req) => {
+  try {
+    console.log('🟦 [Kick Rejoin] Request received');
+    
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    
+    if (!user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { kick_payment_id, stream_id } = await req.json();
+
+    if (!kick_payment_id || !stream_id) {
+      return Response.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    console.log('🟦 [Kick Rejoin] User:', user.email, 'Stream:', stream_id);
+
+    const SQUARE_ACCESS_TOKEN = Deno.env.get("SQUARE_ACCESS_TOKEN");
+    const SQUARE_LOCATION_ID = Deno.env.get("SQUARE_LOCATION_ID");
+
+    if (!SQUARE_ACCESS_TOKEN || !SQUARE_LOCATION_ID) {
+      return Response.json({ 
+        error: "Payment system not configured"
+      }, { status: 500 });
+    }
+
+    const client = new Client({
+      accessToken: SQUARE_ACCESS_TOKEN,
+      environment: Environment.Production,
+    });
+
+    const { checkoutApi } = client;
+    const idempotencyKey = crypto.randomUUID();
+    
+    // $5 = 500 cents
+    const amountInCents = 500;
+    
+    const checkoutRequest = {
+      idempotencyKey,
+      order: {
+        locationId: SQUARE_LOCATION_ID,
+        lineItems: [
+          {
+            name: "Stream Rejoin Fee - Regain Access",
+            quantity: "1",
+            basePriceMoney: {
+              amount: BigInt(amountInCents),
+              currency: "USD"
+            }
+          }
+        ]
+      },
+      checkoutOptions: {
+        redirectUrl: `https://livetrollz.base44.app/#/StreamViewer?id=${stream_id}&rejoinPaid=true&kickPaymentId=${kick_payment_id}`,
+        allowTipping: false,
+        acceptedPaymentMethods: {
+          applePay: true,
+          googlePay: true,
+          cashAppPay: true,
+        }
+      },
+      prePopulatedData: {
+        buyerEmail: user.email,
+      }
+    };
+
+    console.log('🟦 [Kick Rejoin] Creating payment link...');
+
+    const response = await checkoutApi.createPaymentLink(checkoutRequest);
+
+    if (!response.result || !response.result.paymentLink) {
+      return Response.json({ 
+        error: "Failed to create payment link"
+      }, { status: 500 });
+    }
+
+    const paymentLink = response.result.paymentLink;
+    console.log('✅ [Kick Rejoin] Payment link created:', paymentLink.url);
+
+    // Update kick payment record with Square order ID
+    await base44.asServiceRole.entities.StreamKickPayment.update(kick_payment_id, {
+      square_order_id: paymentLink.orderId,
+      payment_status: "pending"
+    });
+
+   

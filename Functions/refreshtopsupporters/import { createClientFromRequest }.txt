@@ -1,0 +1,75 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+
+    // Verify user is admin
+    const user = await base44.auth.me();
+    if (!user || user.role !== 'admin') {
+      return Response.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
+    }
+
+    console.log('🔄 Refreshing all Top Supporters leaderboards from historical data...');
+
+    // Step 1: Get all StreamGift records
+    const streamGifts = await base44.asServiceRole.entities.StreamGift.list("created_date", 10000);
+    console.log(`📊 Found ${streamGifts.length} stream gifts`);
+
+    // Step 2: Get all PostGift records
+    const postGifts = await base44.asServiceRole.entities.PostGift.list("created_date", 10000);
+    console.log(`📊 Found ${postGifts.length} post gifts`);
+
+    // Step 3: Aggregate gifts by (streamer, gifter) pair
+    const leaderboardMap = new Map();
+
+    // Process stream gifts
+    for (const gift of streamGifts) {
+      // Get stream to find streamer
+      const streams = await base44.asServiceRole.entities.Stream.filter({ id: gift.stream_id });
+      if (streams.length === 0) continue;
+      
+      const stream = streams[0];
+      const key = `${stream.streamer_id}_${gift.sender_id}`;
+
+      if (!leaderboardMap.has(key)) {
+        // Get gifter info
+        const gifters = await base44.asServiceRole.entities.User.filter({ id: gift.sender_id });
+        const gifter = gifters[0];
+
+        leaderboardMap.set(key, {
+          streamer_id: stream.streamer_id,
+          streamer_name: stream.streamer_name,
+          gifter_id: gift.sender_id,
+          gifter_name: gift.sender_name,
+          gifter_username: gifter?.username || gift.sender_name,
+          gifter_avatar: gifter?.avatar,
+          total_coins_gifted: 0,
+          total_gifts_sent: 0,
+          last_gift_date: gift.created_date
+        });
+      }
+
+      const entry = leaderboardMap.get(key);
+      entry.total_coins_gifted += gift.coin_value || 0;
+      entry.total_gifts_sent += 1;
+      
+      // Update last gift date if newer
+      if (new Date(gift.created_date) > new Date(entry.last_gift_date)) {
+        entry.last_gift_date = gift.created_date;
+      }
+    }
+
+    // Process post gifts
+    for (const gift of postGifts) {
+      const key = `${gift.receiver_id}_${gift.sender_id}`;
+
+      if (!leaderboardMap.has(key)) {
+        // Get gifter info
+        const gifters = await base44.asServiceRole.entities.User.filter({ id: gift.sender_id });
+        const gifter = gifters[0];
+
+        leaderboardMap.set(key, {
+          streamer_id: gift.receiver_id,
+          streamer_name: gift.receiver_name,
+   

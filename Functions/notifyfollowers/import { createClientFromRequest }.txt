@@ -1,0 +1,55 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    
+    // Verify user is authenticated
+    const user = await base44.auth.me();
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { streamId, streamTitle, streamerId, streamerName, followerIds } = await req.json();
+
+    if (!streamId || !followerIds || followerIds.length === 0) {
+      return Response.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
+
+    console.log(`📣 Notifying ${followerIds.length} followers about stream ${streamId}`);
+
+    let notified = 0;
+    for (const followerId of followerIds) {
+      try {
+        await base44.asServiceRole.entities.Notification.create({
+          user_id: followerId,
+          type: "stream_live",
+          title: "🔴 Now Live!",
+          message: `${streamerName} is now streaming: ${streamTitle}`,
+          icon: "📺",
+          link_url: `/#/StreamViewer?id=${streamId}`,
+          related_user_id: streamerId,
+          related_user_name: streamerName,
+          related_stream_id: streamId
+        });
+        notified++;
+      } catch (error) {
+        console.error(`Failed to notify follower ${followerId}:`, error);
+      }
+    }
+
+    console.log(`✅ Notified ${notified}/${followerIds.length} followers`);
+
+    return Response.json({
+      success: true,
+      notified: notified,
+      total: followerIds.length
+    });
+
+  } catch (error) {
+    console.error('❌ Error notifying followers:', error);
+    return Response.json({
+      error: error.message
+    }, { status: 500 });
+  }
+});

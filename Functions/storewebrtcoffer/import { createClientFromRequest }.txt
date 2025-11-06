@@ -1,0 +1,36 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    
+    const user = await base44.auth.me();
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { streamId, offer } = await req.json();
+
+    if (!streamId || !offer) {
+      return Response.json({ error: 'Stream ID and offer required' }, { status: 400 });
+    }
+
+    console.log('📡 Storing WebRTC offer for stream:', streamId);
+
+    // Store the offer in the Stream entity
+    await base44.entities.Stream.update(streamId, {
+      webrtc_offer: offer
+    });
+
+    return Response.json({
+      success: true,
+      message: 'Offer stored successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error storing WebRTC offer:', error);
+    return Response.json({
+      error: error.message
+    }, { status: 500 });
+  }
+});

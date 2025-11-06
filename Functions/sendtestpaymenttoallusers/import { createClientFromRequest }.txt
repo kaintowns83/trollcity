@@ -1,0 +1,91 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+
+    // Verify admin
+    const user = await base44.auth.me();
+    if (!user || user.role !== 'admin') {
+      return Response.json({ error: 'Unauthorized - Admin only' }, { status: 401 });
+    }
+
+    console.log('💳 Sending test payment notifications to all users with payment methods...');
+
+    // Get all users with payment methods
+    const allUsers = await base44.asServiceRole.entities.User.list("-created_date", 10000);
+    const usersWithPayment = allUsers.filter(u => 
+      u.payment_method && 
+      !u.account_deleted &&
+      (u.payment_email || u.payment_username || u.bank_account_number)
+    );
+
+    console.log(`Found ${usersWithPayment.length} users with payment methods`);
+
+    let sent = 0;
+    for (const targetUser of usersWithPayment) {
+      try {
+        // Check if verification already exists
+        const existingVerifications = await base44.asServiceRole.entities.PaymentVerification.filter({
+          user_id: targetUser.id
+        });
+
+        if (existingVerifications.length > 0) {
+          // Update existing
+          await base44.asServiceRole.entities.PaymentVerification.update(existingVerifications[0].id, {
+            test_payment_sent: true,
+            test_payment_date: new Date().toISOString(),
+            payment_method: targetUser.payment_method,
+            payment_details: targetUser.payment_email || targetUser.payment_username || "Bank Transfer",
+            notes: `Test payment notification sent by ${user.full_name}`
+          });
+        } else {
+          // Create new
+          await base44.asServiceRole.entities.PaymentVerification.create({
+            user_id: targetUser.id,
+            user_name: targetUser.full_name,
+            user_email: targetUser.email,
+            payment_method: targetUser.payment_method,
+            payment_details: targetUser.payment_email || targetUser.payment_username || "Bank Transfer",
+            test_payment_sent: true,
+            test_payment_date: new Date().toISOString(),
+            verified_by_user: false,
+            verification_required: true,
+            notes: `Test payment notification sent by ${user.full_name}`
+          });
+        }
+
+        // Send notification
+        await base44.asServiceRole.entities.Notification.create({
+          user_id: targetUser.id,
+          type: "achievement",
+          title: "💳 Test Payment Sent!",
+          message: `We've sent a $0.00 test payment to your ${targetUser.payment_method} account (${targetUser.payment_email || targetUser.payment_username || 'bank account'}). Please verify you received it in your Profile → Payment tab to enable payouts.`,
+          icon: "✅",
+          link_url: "/#/Profile?tab=payment"
+        });
+
+        sent++;
+        console.log(`✅ [${sent}/${usersWithPayment.length}] Notification sent to ${targetUser.email}`);
+
+      } catch (error) {
+        console.error(`❌ Failed to notify ${targetUser.email}:`, error);
+      }
+    }
+
+    console.log(`✅ Test payment notifications sent to ${sent}/${usersWithPayment.length} users`);
+
+    return Response.json({
+      success: true,
+      sent: sent,
+      total: usersWithPayment.length,
+      message: `Test payment notifications sent to ${sent} users. Note: Actual $0.00 payments require Stripe integration.`
+    });
+
+  } catch (error) {
+    console.error('❌ Test payments error:', error);
+    return Response.json({
+      error: error.message
+    }, { status: 500 });
+  }
+});

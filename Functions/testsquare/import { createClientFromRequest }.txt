@@ -1,0 +1,61 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+
+Deno.serve(async (req) => {
+  try {
+    console.log('🧪 Testing Square credentials...');
+    
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    
+    if (!user) {
+      return Response.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Get credentials
+    const SQUARE_ACCESS_TOKEN = Deno.env.get("SQUARE_ACCESS_TOKEN");
+    const SQUARE_LOCATION_ID = Deno.env.get("SQUARE_LOCATION_ID");
+    const SQUARE_APPLICATION_ID = Deno.env.get("SQUARE_APPLICATION_ID");
+
+    console.log('Access Token exists:', !!SQUARE_ACCESS_TOKEN);
+    console.log('Access Token length:', SQUARE_ACCESS_TOKEN?.length);
+    console.log('Location ID:', SQUARE_LOCATION_ID);
+    console.log('Application ID:', SQUARE_APPLICATION_ID);
+
+    if (!SQUARE_ACCESS_TOKEN) {
+      return Response.json({ 
+        error: "SQUARE_ACCESS_TOKEN not set",
+        hasToken: false,
+        hasLocation: !!SQUARE_LOCATION_ID,
+        hasAppId: !!SQUARE_APPLICATION_ID
+      }, { status: 500 });
+    }
+
+    if (!SQUARE_LOCATION_ID) {
+      return Response.json({ 
+        error: "SQUARE_LOCATION_ID not set",
+        hasToken: !!SQUARE_ACCESS_TOKEN,
+        hasLocation: false,
+        hasAppId: !!SQUARE_APPLICATION_ID
+      }, { status: 500 });
+    }
+
+    // Try importing Square SDK
+    console.log('🟦 Importing Square SDK...');
+    const { Client, Environment } = await import('npm:square@35.0.0');
+    console.log('✅ Square SDK imported successfully');
+
+    // Try creating client
+    console.log('🟦 Creating Square client...');
+    const client = new Client({
+      accessToken: SQUARE_ACCESS_TOKEN,
+      environment: Environment.Production,
+    });
+    console.log('✅ Square client created');
+
+    // Try a simple API call
+    console.log('🟦 Testing Square API...');
+    const { locationsApi } = client;
+    const locationsResponse = await locationsApi.listLocations();
+    console.log('✅ Square API call successful');
+    console.log('Locations:', locationsResponse.result.locations?.map(l => ({
+   
